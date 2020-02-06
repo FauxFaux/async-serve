@@ -29,7 +29,13 @@ async fn run() {
                 break;
             },
             client = incoming.next() => client,
-            _ = workers.next() => continue,
+            garbage = workers.next() => {
+                // unfortunately, we see the None here
+                if let Some(()) = garbage {
+                    log::debug!("garbage collected a client");
+                }
+                continue;
+            },
         };
 
         // I think this might be irrefutable.
