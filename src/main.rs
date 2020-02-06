@@ -28,7 +28,7 @@ async fn run() {
     let mut stopper = async_ctrlc::CtrlC::new().expect("init").fuse();
 
     let mut workers = Unordered {
-        inner: Box::pin(FuturesUnordered::new()),
+        inner: FuturesUnordered::new(),
     };
 
     loop {
@@ -64,7 +64,7 @@ async fn run() {
 }
 
 struct Unordered<T, Fut: Future<Output = T>> {
-    inner: Pin<Box<FuturesUnordered<Fut>>>,
+    inner: FuturesUnordered<Fut>,
 }
 
 impl<T, Fut: Future<Output = T>> Future for Unordered<T, Fut> {
@@ -75,7 +75,7 @@ impl<T, Fut: Future<Output = T>> Future for Unordered<T, Fut> {
             return Poll::Pending;
         }
 
-        match self.inner.as_mut().poll_next(cx) {
+        match Pin::new(&mut self.inner).poll_next(cx) {
             Poll::Ready(Some(x)) => Poll::Ready(x),
             Poll::Pending => Poll::Pending,
             Poll::Ready(None) => unreachable!("checked above"),
