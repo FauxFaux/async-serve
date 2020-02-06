@@ -4,10 +4,12 @@ use async_std::stream::StreamExt as _;
 use async_std::task;
 use futures::io::AsyncReadExt as _;
 use futures::io::AsyncWriteExt as _;
+use futures::FutureExt;
 
 fn main() {
     pretty_env_logger::init();
-    task::block_on(run())
+    task::block_on(run());
+    log::info!("app exiting");
 }
 
 async fn run() {
@@ -15,12 +17,29 @@ async fn run() {
     log::info!("listening on localhost:1773");
 
     let mut serv = serv.incoming();
+    let mut stopper = async_ctrlc::CtrlC::new().expect("init").fuse();
 
     loop {
-        let client = serv.next().await.expect("accept").expect("huh");
+        let client = futures::select! {
+            _ = stopper => {
+                log::info!("woken by cancellation");
+                break;
+            },
+            client = serv.next().fuse() => client,
+        };
+
+        // I think this might be irrefutable.
+        let client = match client {
+            Some(client) => client,
+            None => break,
+        };
+
+        let client = client.expect("accept");
         log::info!("accepted client from {:?}", client.peer_addr());
         task::spawn(client_loop(client));
     }
+
+    log::info!("listener shut down, bye");
 }
 
 async fn client_loop(mut conn: TcpStream) {
