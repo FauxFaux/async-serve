@@ -16,8 +16,10 @@ async fn run() {
     let serv = TcpListener::bind("localhost:1773").await.expect("bind");
     log::info!("listening on localhost:1773");
 
-    let mut serv = serv.incoming();
+    let mut incoming = serv.incoming();
     let mut stopper = async_ctrlc::CtrlC::new().expect("init").fuse();
+
+    let mut workers = Vec::new();
 
     loop {
         let client = futures::select! {
@@ -25,7 +27,7 @@ async fn run() {
                 log::info!("woken by cancellation");
                 break;
             },
-            client = serv.next().fuse() => client,
+            client = incoming.next().fuse() => client,
         };
 
         // I think this might be irrefutable.
@@ -36,7 +38,16 @@ async fn run() {
 
         let client = client.expect("accept");
         log::info!("accepted client from {:?}", client.peer_addr());
-        task::spawn(client_loop(client));
+        let handle = task::spawn(client_loop(client));
+        workers.push(handle);
+    }
+
+    drop(serv);
+    log::info!("listener shut down, draining clients");
+
+    for (id, worker) in workers.into_iter().enumerate() {
+        log::info!("draining client {}", id);
+        worker.await;
     }
 
     log::info!("listener shut down, bye");
