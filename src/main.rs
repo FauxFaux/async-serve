@@ -49,7 +49,7 @@ async fn run() {
 
         let client = client.expect("accept");
         log::info!("accepted client from {:?}", client.peer_addr());
-        let handle = task::spawn(client_loop(client));
+        let handle = client_loop(client);
         workers.inner.push(handle);
     }
 
