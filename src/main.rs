@@ -24,7 +24,7 @@ async fn run() {
     let serv = TcpListener::bind("localhost:1773").await.expect("bind");
     log::info!("listening on localhost:1773");
 
-    let mut incoming = serv.incoming();
+    let mut incoming = serv.incoming().fuse();
     let mut stopper = async_ctrlc::CtrlC::new().expect("init").fuse();
 
     let mut workers = Unordered {
@@ -71,9 +71,14 @@ impl<T, Fut: Future<Output = T>> Future for Unordered<T, Fut> {
     type Output = T;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if self.inner.is_empty() {
+            return Poll::Pending;
+        }
+
         match self.inner.as_mut().poll_next(cx) {
             Poll::Ready(Some(x)) => Poll::Ready(x),
-            Poll::Ready(None) | Poll::Pending => Poll::Pending,
+            Poll::Pending => Poll::Pending,
+            Poll::Ready(None) => unreachable!("checked above"),
         }
     }
 }
