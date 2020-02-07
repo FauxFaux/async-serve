@@ -1,11 +1,12 @@
 use async_std::net::TcpListener;
 use async_std::net::TcpStream;
 use async_std::task;
+use futures::future::FusedFuture as _;
 use futures::io::AsyncReadExt as _;
 use futures::io::AsyncWriteExt as _;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use futures::FutureExt;
+use futures::FutureExt as _;
 
 fn main() {
     pretty_env_logger::init();
@@ -53,11 +54,21 @@ async fn run() {
     drop(serv);
     log::info!("listener shut down, draining clients");
 
-    while let Some(_result) = workers.next().await {
-        log::info!("drained worker");
+    while !stopper.is_terminated() {
+        futures::select! {
+            worker = workers.next() => {
+                log::info!("{} clients still connected", workers.len());
+                if worker.is_none() {
+                    log::info!("all clients disconnected");
+                    break;
+                }
+            },
+            _ = stopper => break,
+            complete => break,
+        }
     }
 
-    log::info!("listener shut down, bye");
+    log::info!("bye");
 }
 
 async fn client_loop(mut conn: TcpStream) {
