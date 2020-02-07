@@ -1,12 +1,11 @@
 use async_std::net::TcpListener;
 use async_std::net::TcpStream;
 use async_std::task;
-use futures::future::FusedFuture as _;
 use futures::io::AsyncReadExt as _;
 use futures::io::AsyncWriteExt as _;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt as _;
-use futures::FutureExt as _;
+use futures::SinkExt;
 
 fn main() {
     pretty_env_logger::init();
@@ -19,13 +18,17 @@ async fn run() {
     log::info!("listening on localhost:1773");
 
     let mut incoming = serv.incoming().fuse();
-    let mut stopper = async_ctrlc::CtrlC::new().expect("init").fuse();
+    let (term_send, mut term_recv) = futures::channel::mpsc::channel(1);
+    ctrlc::set_handler(move || {
+        task::block_on(term_send.clone().send(())).expect("messaging about shutdown can't fail")
+    })
+    .expect("adding termination");
 
     let mut workers = FuturesUnordered::new();
 
     loop {
         let client = futures::select! {
-            _ = stopper => {
+            _ = term_recv.next() => {
                 log::info!("woken by cancellation");
                 break;
             },
@@ -54,7 +57,7 @@ async fn run() {
     drop(serv);
     log::info!("listener shut down, draining clients");
 
-    while !stopper.is_terminated() {
+    loop {
         futures::select! {
             worker = workers.next() => {
                 log::info!("{} clients still connected", workers.len());
@@ -63,7 +66,7 @@ async fn run() {
                     break;
                 }
             },
-            _ = stopper => break,
+            _ = term_recv.next() => break,
             complete => break,
         }
     }

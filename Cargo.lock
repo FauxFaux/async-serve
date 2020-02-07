@@ -10,20 +10,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "async-ctrlc"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d59a172dcc98d67707ccd5bd60428ae2912a12295098dc0d35cdcae165314a2d"
-dependencies = [
- "ctrlc",
-]
-
-[[package]]
 name = "async-echo"
 version = "0.1.0"
 dependencies = [
- "async-ctrlc",
  "async-std",
+ "ctrlc",
  "futures",
  "log",
  "pretty_env_logger",
