@@ -7,9 +7,9 @@ edition = "2018"
 [dependencies]
 async-std = "1"
 async-listen = "0.2"
-ctrlc = "3"
 futures = "0.3"
 slog = "2"
 
 [dev-dependencies]
+async-ctrlc = "1"
 sloggers = "0.3"
