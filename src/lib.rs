@@ -1,21 +1,29 @@
+#[macro_use]
+extern crate slog;
+
 use async_std::net::TcpListener;
 use async_std::net::TcpStream;
+use async_std::net::ToSocketAddrs;
 use async_std::task;
 use futures::io::AsyncReadExt as _;
 use futures::io::AsyncWriteExt as _;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt as _;
+use futures::Future;
 use futures::SinkExt;
 
-pub fn demo() {
-    pretty_env_logger::init();
-    task::block_on(run());
-    log::info!("app exiting");
-}
+pub use slog::Logger;
 
-async fn run() {
-    let serv = TcpListener::bind("localhost:1773").await.expect("bind");
-    log::info!("listening on localhost:1773");
+pub async fn run<A, X, S, H, R>(logger: Logger, addr: A, state: S, term: X, mut handler: H)
+where
+    A: ToSocketAddrs,
+    S: Send + Clone,
+    H: FnMut(TcpStream, S, Logger) -> R,
+    X: Future,
+    R: Future<Output = ()>,
+{
+    let serv = TcpListener::bind(addr).await.expect("bind");
+    info!(logger, "listening on localhost:1773");
 
     let mut incoming = serv.incoming().fuse();
     let (term_send, mut term_recv) = futures::channel::mpsc::channel(1);
@@ -29,14 +37,14 @@ async fn run() {
     loop {
         let client = futures::select! {
             _ = term_recv.next() => {
-                log::info!("woken by cancellation");
+                info!(logger, "woken by cancellation");
                 break;
             },
             client = incoming.next() => client,
             garbage = workers.next() => {
                 // unfortunately, we see the None here
                 if let Some(()) = garbage {
-                    log::debug!("garbage collected a client");
+                    debug!(logger, "garbage collected a client");
                 }
                 continue;
             },
@@ -49,20 +57,21 @@ async fn run() {
         };
 
         let client = client.expect("accept");
-        log::info!("accepted client from {:?}", client.peer_addr());
-        let handle = client_loop(client);
+        info!(logger, "accepted client from {:?}", client.peer_addr());
+        let state = state.clone();
+        let handle = handler(client, state, logger.clone());
         workers.push(handle);
     }
 
     drop(serv);
-    log::info!("listener shut down, draining clients");
+    info!(logger, "listener shut down, draining clients");
 
     loop {
         futures::select! {
             worker = workers.next() => {
-                log::info!("{} clients still connected", workers.len());
+                info!(logger, "{} clients still connected", workers.len());
                 if worker.is_none() {
-                    log::info!("all clients disconnected");
+                    info!(logger, "all clients disconnected");
                     break;
                 }
             },
@@ -71,22 +80,9 @@ async fn run() {
         }
     }
 
-    log::info!("bye");
+    info!(logger, "bye");
 }
 
-async fn client_loop(mut conn: TcpStream) {
-    let mut buf = [0u8; 4096];
-    while let Ok(found) = conn.read(&mut buf).await {
-        let buf = &buf[..found];
-        if buf.is_empty() {
-            log::info!("{:?}: eof", conn.peer_addr());
-            break;
-        }
-        if let Err(e) = conn.write_all(buf).await {
-            log::warn!("{:?} couldn't write: {:?}", conn.peer_addr(), e);
-            break;
-        }
-        log::debug!("{:?} wrote {}", conn.peer_addr(), buf.len());
-    }
-    log::info!("{:?} dropping client", conn.peer_addr());
+pub fn forever() -> impl Future<Output = ()> {
+    futures::future::pending()
 }

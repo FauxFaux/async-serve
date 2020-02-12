@@ -1,12 +1,15 @@
 [package]
-name = "async-listen"
+name = "async-serve"
 version = "0.1.0"
 authors = ["Chris West (Faux) <git@goeswhere.com>"]
 edition = "2018"
 
 [dependencies]
-ctrlc = "3"
 async-std = "1"
+async-listen = "0.2"
+ctrlc = "3"
 futures = "0.3"
-log = "0.4"
-pretty_env_logger = "0.4"
+slog = "2"
+
+[dev-dependencies]
+sloggers = "0.3"
