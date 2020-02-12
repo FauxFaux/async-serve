@@ -12,4 +12,6 @@ slog = "2"
 
 [dev-dependencies]
 async-ctrlc = "1"
+httparse = "1"
+path-tree = "0.1"
 sloggers = "0.3"

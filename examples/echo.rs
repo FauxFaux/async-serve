@@ -7,10 +7,9 @@ use async_std::net::TcpStream;
 use async_std::task;
 use futures::io::AsyncReadExt as _;
 use futures::io::AsyncWriteExt as _;
+use slog::Logger;
 use sloggers::types::Severity;
 use sloggers::Build;
-
-use async_serve::Logger;
 
 #[derive(Clone)]
 struct State {

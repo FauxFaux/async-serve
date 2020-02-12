@@ -14,7 +14,7 @@ use futures::stream::StreamExt as _;
 use futures::Future;
 use futures::FutureExt as _;
 
-pub use slog::Logger;
+use slog::Logger;
 
 pub async fn run<A, X, S, H, R>(
     logger: Logger,
