@@ -7,7 +7,7 @@ use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use futures::SinkExt;
 
-fn main() {
+pub fn demo() {
     pretty_env_logger::init();
     task::block_on(run());
     log::info!("app exiting");
