@@ -2,6 +2,7 @@
 extern crate slog;
 
 use std::io;
+use std::time::Duration;
 
 use async_std::net::TcpStream;
 use async_std::task;
@@ -46,12 +47,35 @@ fn main() {
 
 async fn dispatch(logger: Logger, mut conn: TcpStream) -> io::Result<()> {
     let url = read_request(&logger, &mut conn).await?;
+    let logger = logger.new(o!("url" => url.to_string()));
 
-    info!(logger, "404"; "url" => url);
-    conn.write_all(b"HTTP/1.0 404 Nah\r\nConnection: close\r\n\r\n")
-        .await?;
+    match url.as_ref() {
+        "/hello" => {
+            conn.write_all(&response_header(200)).await?;
+            conn.write_all(b"hello, world!").await?;
+        }
+
+        "/tick" => {
+            conn.write_all(&response_header(200)).await?;
+
+            loop {
+                conn.write_all(b"tick!\n").await?;
+                conn.flush().await?;
+                task::sleep(Duration::from_secs(1)).await;
+            }
+        }
+
+        _ => {
+            info!(logger, "not found");
+            conn.write_all(&response_header(404)).await?;
+        }
+    }
 
     Ok(())
+}
+
+fn response_header(code: u16) -> Vec<u8> {
+    format!("HTTP/1.0 {} Watevs\r\nConnection: close\r\n\r\n", code).into_bytes()
 }
 
 // oh. my god.
