@@ -8,6 +8,7 @@ use async_std::net::TcpStream;
 use async_std::net::ToSocketAddrs;
 use async_std::task;
 use futures::future::FusedFuture;
+use futures::stream::select_all;
 use futures::stream::FuturesUnordered;
 use futures::stream::StreamExt as _;
 use futures::Future;
@@ -17,7 +18,7 @@ pub use slog::Logger;
 
 pub async fn run<A, X, S, H, R>(
     logger: Logger,
-    addr: A,
+    addrs: &[A],
     state: S,
     term: X,
     mut handler: H,
@@ -29,12 +30,16 @@ where
     X: Unpin + Future,
     R: 'static + Send + Future<Output = io::Result<()>>,
 {
-    let serv = TcpListener::bind(addr).await?;
-    info!(logger, "listening"; "addr" => serv.local_addr()?);
-
-    let mut incoming = serv.incoming().fuse();
     let mut term = term.fuse();
 
+    let mut servers = Vec::with_capacity(addrs.len());
+    for addr in addrs {
+        let server = TcpListener::bind(addr).await?;
+        info!(logger, "listening"; "addr" => server.local_addr()?);
+        servers.push(server);
+    }
+
+    let mut incoming = select_all(servers.iter().map(|v| v.incoming()));
     let mut workers = FuturesUnordered::new();
 
     loop {
@@ -64,7 +69,8 @@ where
         workers.push(handle);
     }
 
-    drop(serv);
+    drop(incoming);
+    drop(servers);
     info!(logger, "listener(s) closed, draining clients"; "clients" => workers.len());
 
     while let Some(worker) = workers.next().await {

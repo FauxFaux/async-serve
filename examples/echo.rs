@@ -29,7 +29,7 @@ fn main() {
 
     task::block_on(async_serve::run(
         state.logger.clone(),
-        "127.0.0.1:1337",
+        &["127.0.0.1:1337", "127.0.0.1:1447"],
         state,
         ctrl_c,
         |conn, State { logger }| client_loop(logger, conn),
