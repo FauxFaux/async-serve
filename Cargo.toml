@@ -11,6 +11,7 @@ futures = "0.3"
 slog = "2"
 
 [dev-dependencies]
+aiowrap = "0.1"
 async-ctrlc = "1"
 httparse = "1"
 sloggers = "0.3"

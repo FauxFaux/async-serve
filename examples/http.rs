@@ -4,6 +4,7 @@ extern crate slog;
 use std::io;
 use std::time::Duration;
 
+use aiowrap::DequeReader;
 use async_std::net::TcpStream;
 use async_std::task;
 use futures::io::AsyncReadExt as _;
@@ -46,7 +47,8 @@ fn main() {
 }
 
 async fn dispatch(logger: Logger, conn: TcpStream) -> io::Result<()> {
-    let (mut read, mut write) = conn.split();
+    let (read, mut write) = conn.split();
+    let mut read = DequeReader::new(read);
     let url = read_request(&logger, &mut read).await?;
     let logger = logger.new(o!("url" => url.to_string()));
 
@@ -79,21 +81,15 @@ fn response_header(code: u16) -> Vec<u8> {
     format!("HTTP/1.0 {} Watevs\r\nConnection: close\r\n\r\n", code).into_bytes()
 }
 
-// oh. my god.
-async fn read_request<R>(logger: &Logger, mut from: R) -> io::Result<String>
+async fn read_request<R>(logger: &Logger, from: &mut DequeReader<R>) -> io::Result<String>
 where
     R: Unpin + AsyncRead,
 {
-    let mut whole = Vec::with_capacity(512);
-    loop {
-        let mut buf = [0u8; 4096];
-        let found = from.read(&mut buf).await?;
-        let buf = &buf[..found];
-        whole.extend_from_slice(buf);
-
+    while from.read_more().await? {
         let mut headers = [httparse::EMPTY_HEADER; 16];
         let mut req = httparse::Request::new(&mut headers);
-        match req.parse(whole.as_ref()) {
+        match req.parse(from.buffer()) {
+            // BORROW CHECKER complains if you try and return a ref here, I think it's wrong.
             Ok(Status::Complete(_)) => return Ok(req.path.unwrap().to_string()),
             Ok(Status::Partial) => {
                 if let Some(path) = req.path {
@@ -105,9 +101,7 @@ where
                 return Err(io::ErrorKind::InvalidData.into());
             }
         }
-
-        if buf.is_empty() {
-            return Err(io::ErrorKind::UnexpectedEof.into());
-        }
     }
+
+    Err(io::ErrorKind::UnexpectedEof.into())
 }
