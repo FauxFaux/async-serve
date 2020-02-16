@@ -45,29 +45,30 @@ fn main() {
     .expect("success")
 }
 
-async fn dispatch(logger: Logger, mut conn: TcpStream) -> io::Result<()> {
-    let url = read_request(&logger, &mut conn).await?;
+async fn dispatch(logger: Logger, conn: TcpStream) -> io::Result<()> {
+    let (mut read, mut write) = conn.split();
+    let url = read_request(&logger, &mut read).await?;
     let logger = logger.new(o!("url" => url.to_string()));
 
     match url.as_ref() {
         "/hello" => {
-            conn.write_all(&response_header(200)).await?;
-            conn.write_all(b"hello, world!").await?;
+            write.write_all(&response_header(200)).await?;
+            write.write_all(b"hello, world!").await?;
         }
 
         "/tick" => {
-            conn.write_all(&response_header(200)).await?;
+            write.write_all(&response_header(200)).await?;
 
             loop {
-                conn.write_all(b"tick!\n").await?;
-                conn.flush().await?;
+                write.write_all(b"tick!\n").await?;
+                write.flush().await?;
                 task::sleep(Duration::from_secs(1)).await;
             }
         }
 
         _ => {
             info!(logger, "not found");
-            conn.write_all(&response_header(404)).await?;
+            write.write_all(&response_header(404)).await?;
         }
     }
 
